@@ -1,0 +1,8 @@
+{
+  "version": 3,
+  "file": "index.js",
+  "sourceRoot": "../../../",
+  "sources": ["credit_gate.compact", "compiler/standard-library.compact"],
+  "names": [],
+  "mappings": ";;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;EAQA;;;;;;;;;;;;;;;;;;;MASA,AAAA,cAGC;;;;;cAH6B,WAAoB;;;;;;;;;;;;;;;;;;yCAApB,WAAoB;;;;;;;;;gDAApB,WAAoB;;;OAGjD;MAED,AAAA,YASC;;;;;;;;;;;;;;;;;;;;;;OAAA;MAED,AAAA,gBAEC;;OAAA;MAED,AAAA,SAEC;;OAAA;;;;;;;;;;GA5BA;EAHD;;;;;UAAY,WAAmB;UAAE,UAAmB;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;IAJpD;;;;;;;;;yEAAyC;IACzC;;;;;;;;;;yEAAwD;IACxD;;;;;;;;;yEAA+B;IAG7B;;;;;;;2HAA4B,WAAS;;yEAArB;IAChB;;;;;;;2HAAiB,UAAQ;;yEAApB;;;;;;;GACN;ECXD,AAAA,kBAAA;oEAAA;;;EDaA,AAAA,iBAAoC;;0DAApC,cAAoC;;;;;;;;;;;;;;GAAA;EACpC,AAAA,cAAgC;;0DAAhC,WAAgC;;;;;;;;;;;;;;GAAA;EAChC,AAAA,kBAAqC;;0DAArC,eAAqC;;;;;;;;;;;;;;GAAA;EAErC,AAAA,iBAGC,4BAH6B,WAAoB;;;kEACA;;;;;;;;;;;uIAAK;;IACrD;;;;;;;;;;2HAAiC,WAAS;;;;;;wEAA1B;;GACjB;EAED,AAAA,eASC;UAPO,WAA8D;;;;oDAC7D;;;;;;;;;;;2KAAiC,WAAS;;;;yHAA1B;;QAGhB,GAAiC;;6BAAjC,GAAiC;;qDAAhB;;;;;;;;;;;0HAAgB;;;GAGzC;EAED,AAAA,mBAEC,CAF+B,OAAe,EAAE,KAAc,WACtD,KAAG,GACX;EAED,AAAA,YAEC,CAFwB,IAAa;;mCACgC,IAAE;GACvE;;;;;;;;;;;;;;;;;;;;IAnCD;qCAAA;;;;;;;;;;;0GAAyC;KAAA;IACzC;;;;;uCAAA;;;;;;;;;;;;;;;;4GAAwD;;;;;;uCAAxD;;;;;;;;;;;;4GAAwD;;;;;;;;;;;;;;uCAAxD;;;;;;;;;;;;;;;4GAAwD;;;;;;;;;;;;;;uCAAxD;;;;;;;;;;;;;;;;;4GAAwD;;;;;;;;;KAAA;IACxD;qCAAA;;;;;;;;;;;0GAA+B;KAAA;;;;;;;;;;;;EA2B/B,AAAA,gBAEC;;;;UAF+B,OAAe;UAAE,KAAc;;;;;;;;;;;;;;;8CAA/B,OAAe,EAAE,KAAc;GAE9D;EAED,AAAA,SAEC;;;;UAFwB,IAAa;;;;;;;;uCAAb,IAAa;GAErC;;;;"
+}
