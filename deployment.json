@@ -1,0 +1,8 @@
+{
+  "network": "preprod",
+  "contract": "credit_gate",
+  "contractAddress": "cf19450394a3606d38a0880658d807017b6cd0613eef9e739669688e3aacb2f9",
+  "transactionHash": "4890f60cd7a5706b593615255727f88352ad32e437ff83b2e18e4bfc9f66744c",
+  "transactionId": 498536,
+  "verifiedBy": "Midnight Preprod indexer"
+}
