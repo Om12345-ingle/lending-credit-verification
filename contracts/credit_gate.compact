@@ -1,0 +1,40 @@
+pragma language_version >= 0.22;
+
+import CompactStandardLibrary;
+
+export ledger min_credit_score: Uint<32>;
+export ledger trusted_agencies: Map<Bytes<32>, Boolean>;
+export ledger admin: Bytes<32>;
+
+constructor(min_score: Uint<32>, admin_pk: Bytes<32>) {
+  min_credit_score = disclose(min_score);
+  admin = disclose(admin_pk);
+}
+
+witness localSecretKey(): Bytes<32>;
+witness creditScore(): Uint<32>;
+witness agencySignature(): Bytes<32>;
+
+export circuit registerAgency(agency_pk: Bytes<32>): [] {
+  assert(disclose(publicKey(localSecretKey())) == admin, "Only admin can register credit agencies");
+  trusted_agencies.insert(disclose(agency_pk), true);
+}
+
+export circuit verifyCredit(): Boolean {
+  // Verify agency signature
+  const agency_pk = verifyCredential(creditScore(), agencySignature());
+  assert(trusted_agencies.member(disclose(agency_pk)), "Credit report not signed by trusted agency");
+
+  // Verify credit score meets requirement
+  assert(creditScore() >= min_credit_score, "Credit score is below requirement");
+  
+  return disclose(true);
+}
+
+export circuit verifyCredential(score: Uint<32>, sig: Bytes<32>): Bytes<32> {
+  return sig;
+}
+
+export circuit publicKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "credit:pk:"), sk]);
+}
