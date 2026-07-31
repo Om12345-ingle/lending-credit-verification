@@ -1,5 +1,7 @@
 # Lending Credit Verification
 
+![Frontend CI](https://github.com/Om12345-ingle/lending-credit-verification/actions/workflows/frontend-ci.yml/badge.svg?branch=main) ![Contract CI](https://github.com/Om12345-ingle/lending-credit-verification/actions/workflows/contract-ci.yml/badge.svg?branch=main)
+
 A lender-side decision gate that proves a borrower meets a credit policy without disclosing the underlying score.
 
 ## Underwriting flow
@@ -51,3 +53,6 @@ The frontend job builds the Vite app. The Compact job installs the compiler, rec
 
 Demo video: [open the underwriting walkthrough](https://drive.google.com/file/d/1oEU7aEx0xq81FQRpsN-AnyRTKnLDoaIG/view?usp=sharing).
 
+## Verification
+
+Privacy is the product feature: the lender learns only whether the policy is met, while the borrower’s exact score and report details remain private. Run `npm test`, `npm run compile`, and `npm run build`; the five contract scenarios are documented in [TESTING.md](./TESTING.md), the product scope is in [PROPOSAL.md](./PROPOSAL.md), and both CI workflows run on every push and pull request.
