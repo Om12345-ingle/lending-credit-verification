@@ -1,4 +1,5 @@
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { CostModel, QueryContext, createConstructorContext, sampleContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -20,12 +21,19 @@ import { WebSocket } from 'ws';
 
 globalThis.WebSocket = WebSocket;
 
-// CONFIGURATION (Adjust for Preprod vs Local Dev)
-const NETWORK_ID = 'preprod';
-const INDEXER = 'https://indexer.preprod.midnight.network/api/v4/graphql';
-const INDEXER_WS = 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws';
-const NODE = 'https://rpc.preprod.midnight.network';
+// CONFIGURATION (Preview network; override only for an isolated local devnet)
+const NETWORK_ID = 'preview';
+const ACCOUNT_INDEX = 8;
+const INDEXER = 'https://indexer.preview.midnight.network/api/v4/graphql';
+const INDEXER_WS = 'wss://indexer.preview.midnight.network/api/v4/graphql/ws';
+const NODE = 'https://rpc.preview.midnight.network';
 const PROOF_SERVER = 'http://127.0.0.1:6300';
+
+const creditGateWitnesses = {
+  localSecretKey: ({ privateState }) => [privateState, privateState.secretKey],
+  creditScore: ({ privateState }) => [privateState, privateState.creditScore],
+  agencySignature: ({ privateState }) => [privateState, privateState.agencySignature],
+};
 
 const isWalletReady = (state) => state.isSynced || state.unshielded.availableCoins.length > 0;
 
@@ -40,7 +48,7 @@ if (files.length === 0) {
   process.exit(1);
 }
 const walletData = JSON.parse(fs.readFileSync(path.join(walletDir, files[0]), 'utf8'));
-console.log(`Using Wallet: ${walletData.name} | Address: ${walletData.address}`);
+console.log(`Using wallet profile: ${walletData.name} | Preview account: ${ACCOUNT_INDEX}`);
 
 async function deploy() {
   setNetworkId(NETWORK_ID);
@@ -49,7 +57,7 @@ async function deploy() {
   const zkConfigPath = path.resolve('contracts', 'managed', 'credit_gate');
   const contractModule = await import(path.resolve(zkConfigPath, 'contract', 'index.js'));
   const compiledContract = CompiledContract.make('credit_gate', contractModule.Contract).pipe(
-    CompiledContract.withVacantWitnesses,
+    CompiledContract.withWitnesses(creditGateWitnesses),
     CompiledContract.withCompiledFileAssets(zkConfigPath),
   );
   console.log('Credit Gate contract loaded.');
@@ -59,6 +67,9 @@ async function deploy() {
   const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(keys[Roles.Zswap]);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
   const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], getNetworkId());
+  const deployerAddress = PublicKey.fromKeyStore(unshieldedKeystore).address;
+  const contractSecret = keys[Roles.Zswap];
+  const initialPrivateState = { secretKey: contractSecret, creditScore: 0n, agencySignature: new Uint8Array(32) };
 
   // Setup configuration object
   const walletConfig = {
@@ -137,17 +148,26 @@ async function deploy() {
 
   // Constructor arguments: minScore (Uint32 -> bigint), adminPubkey (Bytes<32>)
   const minScore = 650n;
-  const adminPubkey = PublicKey.fromKeyStore(unshieldedKeystore).bytes;
+  const bootstrapContract = new contractModule.Contract(creditGateWitnesses);
+  const bootstrapState = bootstrapContract.initialState(createConstructorContext(initialPrivateState, '0'.repeat(64)), minScore, new Uint8Array(32));
+  const bootstrapContext = {
+    currentPrivateState: bootstrapState.currentPrivateState,
+    currentZswapLocalState: bootstrapState.currentZswapLocalState,
+    costModel: CostModel.initialCostModel(),
+    currentQueryContext: new QueryContext(bootstrapState.currentContractState.data, sampleContractAddress()),
+  };
+  const adminPubkey = bootstrapContract.circuits.publicKey(bootstrapContext, contractSecret).result;
 
   console.log('Generating ZK proofs & deploying Credit Gate contract (takes 30-60 seconds)...');
   const deployed = await deployContract(providers, {
     compiledContract,
     privateStateId: 'creditGateState',
-    initialPrivateState: {},
+    initialPrivateState,
     args: [minScore, adminPubkey],
   });
 
   const contractAddress = deployed.deployTxData.public.contractAddress;
+  const transactionHash = deployed.deployTxData.public.txId ?? deployed.deployTxData.public.transactionId ?? null;
   console.log('\n=== CREDIT GATE CONTRACT SUCCESSFULLY DEPLOYED ===');
   console.log(`Address: ${contractAddress}`);
   console.log(`Network: ${NETWORK_ID}`);
@@ -156,7 +176,8 @@ async function deploy() {
     contractAddress,
     network: NETWORK_ID,
     deployedAt: new Date().toISOString(),
-    deployer: walletData.address,
+    deployer: deployerAddress,
+    transactionHash,
     minScore: minScore.toString()
   }, null, 2));
   console.log('Saved deployment details to deployment.json');
@@ -168,7 +189,7 @@ async function deploy() {
 function deriveKeysFromSeed(seed) {
   const hdWallet = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
   if (hdWallet.type !== 'seedOk') throw new Error('Invalid seed');
-  const result = hdWallet.hdWallet.selectAccount(0).selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust]).deriveKeysAt(0);
+  const result = hdWallet.hdWallet.selectAccount(ACCOUNT_INDEX).selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust]).deriveKeysAt(0);
   if (result.type !== 'keysDerived') throw new Error('Key derivation failed');
   hdWallet.hdWallet.clear();
   return result.keys;
