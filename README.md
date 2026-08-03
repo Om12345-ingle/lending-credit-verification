@@ -26,16 +26,20 @@ Available circuits:
 
 The ledger stores the threshold, trusted agency set, and administrator identity. Exact score, borrower identity, and bureau history remain outside the public result.
 
-## Preprod deployment
+## Preview deployment
 
-| Network | Midnight Preprod |
+| Network | Midnight Preview |
 | --- | --- |
-| Address | `cf19450394a3606d38a0880658d807017b6cd0613eef9e739669688e3aacb2f9` |
-| Transaction | `4890f60cd7a5706b593615255727f88352ad32e437ff83b2e18e4bfc9f66744c` |
+| Address | `0c4bbb7dc537f0d17c5cc7a8df2c93c385fbf8e5c2ff4216d9a964207ffeed0c` |
+| Transaction | `00c0b1d5f34206c1cc894e193c762d1ba78548b667dcfb193cd18bee0a474455f3` |
+| Underwriting deployer | `mn_addr_preview1htenx2hpt3uklqt6dx3qnyz0u5u20e4lh3nygtxqg2y3kdz9c2tq5tcyfd` |
+| Confirmed at | `2026-08-03T19:03:44.831Z` |
 | Indexer status | Confirmed |
 | Contract | `credit_gate` |
 
 ## Local development
+
+Underwriting test wallets are funded with the [official Preview faucet](https://faucet.preview.midnight.network/).
 
 ```bash
 npm install
@@ -45,7 +49,7 @@ npm run build
 npm run dev
 ```
 
-Run `npm run deploy` only after configuring a dedicated Preprod wallet/provider. Never test with real credit files or live customer information.
+Run `npm run deploy` only after configuring a dedicated Preview wallet/provider. Never test with real credit files or live customer information.
 
 ## CI/CD notes
 
