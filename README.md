@@ -4,6 +4,10 @@
 
 A lender-side decision gate that proves a borrower meets a credit policy without disclosing the underlying score.
 
+## Underwriter’s due-diligence file
+
+Open [PROPOSAL.md](./PROPOSAL.md) for the lending thesis, [credit.test.ts](./src/test/credit.test.ts) for threshold and issuer checks, [TESTING.md](./TESTING.md) for repeatability, and [deployment.json](./deployment.json) for the Preview receipt.
+
 ## Underwriting flow
 
 This application is built for a credential agency and a lender:

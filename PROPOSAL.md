@@ -1,5 +1,9 @@
 # Product Proposal: Lending Credit Verification
 
+**Submission category:** Confidential DeFi  
+**Underwriting owner:** `Om12345-ingle`  
+**Decision engine:** MVP verified on Preview
+
 ## Problem
 
 Lenders need a threshold decision, not a borrower’s full score and history.
@@ -25,4 +29,3 @@ Threshold configuration and proof outcome can be audited. Borrower identity, exa
 - Valid scores pass the configured threshold.
 - Invalid agency or score inputs fail.
 - No real financial records are used in testing.
-
