@@ -64,3 +64,7 @@ Demo video: [open the underwriting walkthrough](https://drive.google.com/file/d/
 ## Verification
 
 Privacy is the product feature: the lender learns only whether the policy is met, while the borrower’s exact score and report details remain private. Run `npm test`, `npm run compile`, and `npm run build`; the five contract scenarios are documented in [TESTING.md](./TESTING.md), the product scope is in [PROPOSAL.md](./PROPOSAL.md), and both CI workflows run on every push and pull request.
+
+## Underwriting safeguards
+
+Before operating Lending Credit Verification, read the independent [security model](SECURITY.md) and [operations runbook](OPERATIONS.md). Runtime configuration is fail-closed and its executable checks live in [src/test/runtime-config.test.ts](src/test/runtime-config.test.ts).
