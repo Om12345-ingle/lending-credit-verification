@@ -1,4 +1,5 @@
 {
+  "contractName": "credit_gate",
   "contractAddress": "0c4bbb7dc537f0d17c5cc7a8df2c93c385fbf8e5c2ff4216d9a964207ffeed0c",
   "network": "preview",
   "deployedAt": "2026-08-03T19:03:44.831Z",
