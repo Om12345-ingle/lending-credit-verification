@@ -1,7 +1,16 @@
-import { useState, useEffect } from 'react';
-import { Compass, Wallet, Cpu, Lock, Database, FileText } from 'lucide-react';
-import { submitCreditgateCircuit } from './midnightClient';
-import { verifyCreditGateDeployment, validateCreditGateDeploymentRuntime } from './runtimeConfig';
+import OperatorSetup from './OperatorSetup';
+import { useState, useEffect } from "react";
+import {
+  deployCreditgateContract,
+  creditBytes32,
+  newCreditSecret,
+  readCreditLedger,
+  submitCreditgateCircuit,
+} from "./midnightClient";
+import {
+  verifyCreditGateDeployment,
+  validateCreditGateDeploymentRuntime,
+} from "./runtimeConfig";
 
 const RUNTIME = validateCreditGateDeploymentRuntime({
   networkId: import.meta.env.VITE_NETWORK_ID,
@@ -12,7 +21,27 @@ const RUNTIME = validateCreditGateDeploymentRuntime({
 });
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  const [activeTab, setActiveTab] = useState(() =>
+    ["dashboard", "lending", "walletHub", "deployer", "privacy"].includes(
+      window.location.hash.slice(2),
+    )
+      ? window.location.hash.slice(2)
+      : "home",
+  );
+  useEffect(() => {
+    const navigate = () => {
+      if (["#content", "#main-content"].includes(window.location.hash)) return;
+      const route = window.location.hash.slice(2);
+      setActiveTab(
+        ["dashboard", "lending", "walletHub", "deployer", "privacy"].includes(route)
+          ? route
+          : "home",
+      );
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", navigate);
+    return () => window.removeEventListener("hashchange", navigate);
+  }, []);
   const [walletConnected, setWalletConnected] = useState(false);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [walletBalance, setWalletBalance] = useState<string>("0.00");
@@ -27,8 +56,16 @@ export default function App() {
   const [isDeploying, setIsDeploying] = useState(false);
   const [deployStep, setDeployStep] = useState(0);
 
-  const [ledger, setLedger] = useState({ credit_score_threshold: 700, validity: "false", certified_authority: "Equifax Credit Bureau Division" });
-  const [formValues, setFormValues] = useState({ credit_score: 720, authority_sig: "sig:equifax:credit:approved" });
+  const [ledger, setLedger] = useState<{ credit_score_threshold: number; validity: string; certified_authority: string } | null>(null);
+  const [borrowAmount, setBorrowAmount] = useState(5000);
+  const [activeLoans, setActiveLoans] = useState<any[]>([
+    { id: 'LOAN-402', principal: '12,500 tNIGHT', collateral: '8,125 tNIGHT (65%)', apr: '2.8%', status: 'ACTIVE' }
+  ]);
+  const [formValues, setFormValues] = useState(() => ({
+    credit_score: 750,
+    user_secret: "0909090909090909090909090909090909090909090909090909090909090909",
+    credential_salt: "2929292929292929292929292929292929292929292929292929292929292929",
+  }));
   const [logs, setLogs] = useState<any[]>([]);
   const [isProving, setIsProving] = useState(false);
   const [provingStep, setProvingStep] = useState(0);
@@ -37,37 +74,56 @@ export default function App() {
     "Decrypting credit rating credential data...",
     "Confirming credit bureau issuer signature validity...",
     "Running ZK circuit checking: creditScore >= 700...",
-    "Submitting loan gate eligibility proof..."
+    "Submitting loan gate eligibility proof...",
   ];
 
   const deploySteps = [
     "Compiling credit_gate.compact contract parameters...",
     "Spawning Preview transaction blocks...",
-    "Anchoring credit authority keys directory..."
+    "Anchoring credit authority keys directory...",
   ];
 
   useEffect(() => {
-    fetch('/deployment.json')
-      .then(response => {
-        if (!response.ok) throw new Error('Lending Credit Verification: deployment.json could not be loaded.');
+    fetch("/deployment.json")
+      .then((response) => {
+        if (!response.ok)
+          throw new Error(
+            "Lending Credit Verification: deployment.json could not be loaded.",
+          );
         return response.json();
       })
-      .then(deployment => {
+      .then((deployment) => {
         const verified = verifyCreditGateDeployment(deployment);
-        if (RUNTIME.contractAddress && RUNTIME.contractAddress !== verified.contractAddress) {
-          throw new Error('Lending Credit Verification: environment address does not match deployment evidence.');
+        if (
+          RUNTIME.contractAddress &&
+          RUNTIME.contractAddress !== verified.contractAddress
+        ) {
+          throw new Error(
+            "Lending Credit Verification: environment address does not match deployment evidence.",
+          );
         }
-        setContractAddress(verified.contractAddress);
-        setContractDeployed(true);
+        if (verified.network === RUNTIME.networkId) {
+          setContractAddress(verified.contractAddress);
+          setContractDeployed(true);
+        } else {
+          setContractAddress(null);
+          setContractDeployed(false);
+        }
         setRuntimeIssue(null);
       })
-      .catch(error => {
+      .catch((error) => {
         setContractAddress(null);
         setContractDeployed(false);
-        setRuntimeIssue(error instanceof Error ? error.message : 'Lending Credit Verification: configuration failed.');
+        setRuntimeIssue(
+          error instanceof Error
+            ? error.message
+            : "Lending Credit Verification: configuration failed.",
+        );
       });
     const detectLace = () => {
-      const hasMidnightWallet = Object.values((window as any).midnight ?? {}).some((candidate: any) => typeof candidate?.connect === 'function');
+      const hasMidnightWallet = Object.values(
+        (window as any).midnight ?? {},
+      ).some((candidate: any) => typeof candidate?.connect === "function");
       setLaceDetected(hasMidnightWallet);
     };
     detectLace();
@@ -78,13 +134,25 @@ export default function App() {
   const connectLace = async () => {
     setConnectingWallet(true);
     try {
-      const candidates = Object.values((window as any).midnight ?? {}) as Array<{
+      const candidates = Object.values(
+        (window as any).midnight ?? {},
+      ) as Array<{
         connect?: (networkId: string) => Promise<any>;
         name?: string;
+        rdns?: string;
       }>;
-      const wallet = candidates.find(candidate => typeof candidate.connect === 'function');
+      const oneAm = candidates.find(
+        (c) =>
+          /1am/i.test(`${c.name ?? ""} ${c.rdns ?? ""}`) &&
+          typeof c.connect === "function",
+      );
+      const wallet =
+        oneAm ??
+        candidates.find((candidate) => typeof candidate.connect === "function");
       if (!wallet?.connect) {
-        throw new Error('No Midnight wallet connector was detected. Install 1AM or Lace and unlock it.');
+        throw new Error(
+          "No Midnight wallet connector was detected. Install 1AM or Lace and unlock it.",
+        );
       }
 
       const connected = await wallet.connect(RUNTIME.networkId);
@@ -101,279 +169,683 @@ export default function App() {
         setContractAddress(import.meta.env.VITE_CONTRACT_ADDRESS);
         setContractDeployed(true);
       }
-      logTransaction('wallet', 'MIDNIGHT WALLET CONNECTED', '—', 'Connected through the Midnight DApp Connector API');
+      logTransaction(
+        "wallet",
+        "MIDNIGHT WALLET CONNECTED",
+        "—",
+        "Connected through the Midnight DApp Connector API",
+      );
     } catch (err) {
-      console.error('Midnight wallet connection failed:', err);
-      alert(err instanceof Error ? err.message : 'Midnight wallet connection failed.');
+      console.error("Midnight wallet connection failed:", err);
+      const raw = err instanceof Error ? err.message : String(err || "");
+      const msg = (raw.includes("tabs:outgoing.message.ready") || raw.includes("No Listener")) ? "Wallet extension is asleep or locked. Please open and unlock your 1AM / Lace wallet extension, then retry." : (raw || "Midnight wallet connection failed.");
+      alert(msg);
     } finally {
       setConnectingWallet(false);
     }
   };
 
-
-
   const disconnectLace = () => {
     setWalletConnected(false);
     setWalletAddress(null);
     setWalletBalance("0.00");
-    logTransaction('0x0000...0000', 'LACE WALLET DISCONNECTED', '0.00 tNIGHT', 'Disconnected wallet context');
+    logTransaction(
+      "0x0000...0000",
+      "1AM WALLET DISCONNECTED",
+      "0.00 tNIGHT",
+      "Disconnected wallet context",
+    );
   };
 
   const requestFaucet = () => {
     if (!walletConnected) return;
-    window.open(RUNTIME.faucetUrl, '_blank', 'noopener,noreferrer');
-    logTransaction('—', 'FAUCET OPENED', '—', 'Funding must be confirmed by the official Midnight Preview faucet and wallet balance refresh.');
+    window.open(RUNTIME.faucetUrl, "_blank", "noopener,noreferrer");
+    logTransaction(
+      "—",
+      "FAUCET OPENED",
+      "—",
+      "Funding must be confirmed by the official Midnight Preview faucet and wallet balance refresh.",
+    );
   };
 
   const deployContractAction = async () => {
-    if (!contractAddress || runtimeIssue) {
-      alert('Lending Credit Verification: no verified Preview deployment is available.');
+    if (!connectedWallet) {
+      alert("Connect a Midnight wallet before deploying.");
       return;
     }
-    setContractDeployed(true);
-    logTransaction('—', 'VERIFIED DEPLOYMENT ATTACHED', '—', `Using finalized Preview contract ${contractAddress}`);
+    setIsDeploying(true);
+    try {
+      const result = await deployCreditgateContract(connectedWallet);
+      setContractAddress(result.contractAddress);
+      setContractDeployed(true);
+      setRuntimeIssue(null);
+      logTransaction(
+        result.txId,
+        "CONFIRMED ON MIDNIGHT",
+        "—",
+        `Fresh ${RUNTIME.networkId} deployment ${result.contractAddress}`,
+      );
+    } catch (error) {
+      alert(
+        error instanceof Error ? error.message : "Contract deployment failed.",
+      );
+    } finally {
+      setIsDeploying(false);
+    }
   };
 
   const checkCredit = async () => {
     if (!walletConnected || !contractDeployed || !contractAddress) return;
     try {
-      const result = await submitCreditgateCircuit((window as any).__midnightConnectedWallet, contractAddress, 'verifyCredit');
-      setLedger(prev => ({ ...prev, validity: 'true' }));
-      logTransaction(result.txId, 'CONFIRMED ON MIDNIGHT', '—', 'Confirmed verifyCredit on ' + contractAddress);
+      const privateState = {
+        secretKey: creditBytes32(formValues.user_secret, "User secret"),
+        creditScore: BigInt(formValues.credit_score),
+        credentialSalt: creditBytes32(
+          formValues.credential_salt,
+          "Credential salt",
+        ),
+      };
+      const result = await submitCreditgateCircuit(
+        (window as any).__midnightConnectedWallet,
+        contractAddress,
+        "verifyCredit",
+        [],
+        privateState,
+      );
+      const chain = await readCreditLedger(
+        (window as any).__midnightConnectedWallet,
+        contractAddress,
+      );
+      setLedger({
+        credit_score_threshold: chain.minimumScore,
+        validity: "true",
+        certified_authority: `${chain.issuedCredentialCount} issued credential commitments`,
+      });
+      logTransaction(
+        result.txId,
+        "CONFIRMED ON MIDNIGHT",
+        "—",
+        "Confirmed verifyCredit on " + contractAddress,
+      );
       return;
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'The Midnight transaction failed.');
-      logTransaction('—', 'TRANSACTION FAILED', '—', err instanceof Error ? err.message : 'Unknown transaction failure');
+      alert(
+        err instanceof Error ? err.message : "The Midnight transaction failed.",
+      );
+      logTransaction(
+        "—",
+        "TRANSACTION FAILED",
+        "—",
+        err instanceof Error ? err.message : "Unknown transaction failure",
+      );
       return;
     }
-
   };
 
-  const logTransaction = (hash: string, status: string, fee: string, details: string) => {
-    setLogs(prev => [
+  const logTransaction = (
+    hash: string,
+    status: string,
+    fee: string,
+    details: string,
+  ) => {
+    setLogs((prev) => [
       {
         hash,
-        timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        timestamp: new Date().toISOString().replace("T", " ").substring(0, 19),
         status,
         fee,
-        details
+        details,
       },
-      ...prev
+      ...prev,
     ]);
   };
 
-  if (runtimeIssue) {
-    return (
-      <main role="alert" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: '32px', background: '#080b12', color: '#f8fafc' }}>
-        <section style={{ width: 'min(620px, 100%)', border: '1px solid #ef4444', borderRadius: '18px', padding: '28px', background: '#151922' }}>
-          <p style={{ margin: 0, color: '#fca5a5', fontWeight: 800, letterSpacing: '0.08em' }}>SAFE START BLOCKED</p>
-          <h1 style={{ margin: '12px 0', fontSize: 'clamp(1.7rem, 5vw, 2.6rem)' }}>Lending Credit Verification</h1>
-          <p style={{ lineHeight: 1.65, color: '#cbd5e1' }}>{runtimeIssue}</p>
-          <p style={{ lineHeight: 1.65, color: '#94a3b8' }}>No wallet or contract operation was attempted. Restore this repository's own Preview deployment record, then reload.</p>
-          <button onClick={() => window.location.reload()} style={{ marginTop: '8px', padding: '12px 18px', border: 0, borderRadius: '10px', fontWeight: 800, cursor: 'pointer' }}>Retry configuration</button>
-        </section>
-      </main>
-    );
-  }
-
+  const submitWithStatus = async (action: () => Promise<void>) => {
+    if (isProving) return;
+    setIsProving(true);
+    try {
+      await action();
+    } finally {
+      setIsProving(false);
+    }
+  };
+  const ready = walletConnected && contractDeployed && !runtimeIssue;
+  const pages = [
+    ["dashboard", "Credit Gate"],
+    ["lending", (ledger && logs.some(l => l.details.startsWith("Confirmed verifyCredit"))) ? "Lending Terminal (Unlocked)" : "DeFi Lending Terminal"],
+    ["walletHub", "Wallet"],
+    ["deployer", "Contract"],
+    ["privacy", "Privacy"],
+  ];
   return (
-    <div style={{ maxWidth: '1200px', margin: '0 auto', fontFamily: 'Outfit, sans-serif' }}>
-      
-      {/* Header */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 0', borderBottom: '1px solid var(--border-color)', marginBottom: '30px' }}>
-        <div>
-          <span style={{ padding: '4px 10px', fontSize: '0.75rem', borderRadius: '20px', background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4', border: '1px solid rgba(6, 182, 212, 0.3)', fontWeight: 600 }}>Project 8</span>
-          <h1 style={{ fontSize: '2rem', fontWeight: 'bold', marginTop: '6px' }}>Lending Credit Verification</h1>
-        </div>
-        <div>
-          {walletConnected ? (
-            <div style={{ background: 'rgba(6, 182, 212, 0.08)', border: '1px solid rgba(6, 182, 212, 0.25)', borderRadius: '12px', padding: '8px 16px' }}>
-              Balance: <strong style={{ color: '#06b6d4' }}>{walletBalance} tNIGHT</strong>
-            </div>
-          ) : (
-            <button onClick={connectLace} style={{ width: 'auto' }}>Connect Lace Wallet</button>
-          )}
-        </div>
+    <div className="app-shell">
+      <a
+        className="skip-link"
+        href="#main-content"
+        onClick={(event) => {
+          event.preventDefault();
+          document.getElementById("main-content")?.focus();
+        }}
+      >
+        Skip to content
+      </a>
+      <header className="masthead">
+        <a className="brand" href="#/">
+          AuraCredit
+        </a>
+        <nav aria-label="Main navigation">
+          <a href="#/" aria-current={activeTab === "home" ? "page" : undefined}>
+            About
+          </a>
+          <a
+            href="#/dashboard"
+            aria-current={activeTab !== "home" ? "page" : undefined}
+          >
+            Workspace ↗
+          </a>
+        </nav>
       </header>
-
-<section className="home-dashboard" aria-labelledby="home-dashboard-title">
-        <div className="home-dashboard__lead">
-          <span className="home-kicker">Credit desk</span>
-          <h2 id="home-dashboard-title">Underwriting gate</h2>
-          <p>Show eligibility to a lender without revealing the score.</p>
-          <div className="home-actions">
-            <button type="button" onClick={() => setActiveTab('dashboard')}>Open Workspace</button>
-            <button type="button" className="home-secondary" onClick={() => setActiveTab('privacy')}>Read Privacy Model</button>
-          </div>
-        </div>
-        <div className="home-dashboard__grid">
-          <article className="home-card"><span>Network</span><strong>Midnight Preview</strong><small>{contractDeployed ? 'Contract verified' : 'Contract setup pending'}</small></article>
-          <article className="home-card"><span>Current signal</span><strong>700 score threshold</strong><small>Bureau signature required</small></article>
-          <article className="home-card"><span>Wallet session</span><strong>{walletConnected ? 'Connected' : 'Not connected'}</strong><small>{walletConnected ? walletBalance + ' tNIGHT available' : 'Connect 1AM to continue'}</small></article>
-          <article className="home-card"><span>Contract address</span><strong className="home-address">{contractAddress ? contractAddress.slice(0, 14) + '…' : 'Awaiting deployment'}</strong><small>Unique project deployment</small></article>
-        </div>
-      </section>
-
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '30px', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-        <button onClick={() => setActiveTab('dashboard')} style={{ width: 'auto', padding: '10px 20px', background: activeTab === 'dashboard' ? 'var(--color-primary)' : 'transparent', color: activeTab === 'dashboard' ? 'white' : 'var(--text-secondary)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>🏦 Lending Application</button>
-        <button onClick={() => setActiveTab('deployer')} style={{ width: 'auto', padding: '10px 20px', background: activeTab === 'deployer' ? 'var(--color-primary)' : 'transparent', color: activeTab === 'deployer' ? 'white' : 'var(--text-secondary)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>📑 Credit Scoring Deployer</button>
-        <button onClick={() => setActiveTab('walletHub')} style={{ width: 'auto', padding: '10px 20px', background: activeTab === 'walletHub' ? 'var(--color-primary)' : 'transparent', color: activeTab === 'walletHub' ? 'white' : 'var(--text-secondary)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>📡 Bureau Wallet</button>
-        <button onClick={() => setActiveTab('privacy')} style={{ width: 'auto', padding: '10px 20px', background: activeTab === 'privacy' ? 'var(--color-primary)' : 'transparent', color: activeTab === 'privacy' ? 'white' : 'var(--text-secondary)', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>🔒 Credit Score Privacy</button>
-      </div>
-
-      <main style={{ minHeight: '400px' }}>
-        {activeTab === 'dashboard' && (
-          <div>
-            {(!walletConnected || !contractDeployed) && (
-              <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239,68,68,0.2)', padding: '20px', borderRadius: '12px', marginBottom: '30px', textAlign: 'center' }}>
-                <h3 style={{ margin: 0, color: '#f87171' }}>⚠️ Setup Required</h3>
-                <p style={{ color: 'var(--text-secondary)', margin: '8px 0 0 0', fontSize: '0.9rem' }}>
-                  {!walletConnected ? "Please connect your Lace Wallet in the Wallet Hub." : "Please deploy the Compact contract in the ZK Deployer."}
+      {activeTab === "home" ? (
+        <main id="main-content" tabIndex={-1} className="landing">
+          <section className="hero">
+            <div className="hero-copy">
+              <p className="eyebrow">Zero-Knowledge Undercollateralized Lending</p>
+              <h1>
+                Prove creditworthiness.<em>Keep your financial data private.</em>
+              </h1>
+              <p className="intro">
+                Traditional Web3 forces 150% overcollateralization because borrowers are anonymous. AuraCredit enables 65% undercollateralized loans and 2.8% prime APR by proving credit bureau attestations with Midnight ZK-SNARKs.
+              </p>
+              <div className="actions">
+                <a className="button" href="#/dashboard">
+                  Check eligibility ↗
+                </a>
+                <a href="#/lending">DeFi Lending Terminal ↗</a>
+              </div>
+            </div>
+            <aside className="hero-note">
+              <span className="note-mark" aria-hidden="true">
+                “
+              </span>
+              <h2>Why ZK Credit Matters</h2>
+              <p>
+                Borrowers prove prime creditworthiness directly from trusted bureaus (Equifax, Experian) without exposing SSNs, credit scores, debt balances, or identity to lenders.
+              </p>
+            </aside>
+          </section>
+          <section className="process" aria-label="How it works">
+            <article>
+              <span className="step">01</span>
+              <h2>Have a valid credential</h2>
+              <p>
+                Start with the required credentials and a compatible wallet.
+              </p>
+            </article>
+            <article>
+              <span className="step">02</span>
+              <h2>Enter private inputs</h2>
+              <p>Review your inputs carefully before sending a transaction.</p>
+            </article>
+            <article>
+              <span className="step">03</span>
+              <h2>Review verification</h2>
+              <p>Treat an action as complete only after confirmation.</p>
+            </article>
+          </section>
+          <section className="privacy-note">
+            <h2>Privacy has boundaries.</h2>
+            <p>
+              Your score, credential salt, and proof secret are passed as
+              private witness inputs. Public contract data and a successful
+              verification can still be observable. A proof is not a
+              credit-bureau endorsement, loan approval, or guarantee of
+              confidentiality across the entire device and network.
+            </p>
+          </section>
+        </main>
+      ) : (
+        <div className="workspace">
+          <nav className="workspace-nav" aria-label="Workspace navigation">
+            {pages.map(([route, label]) => (
+              <a
+                key={route}
+                href={"#/" + route}
+                aria-current={activeTab === route ? "page" : undefined}
+              >
+                {label}
+              </a>
+            ))}
+          </nav>
+          <main id="main-content" tabIndex={-1} className="workspace-main">
+            <div className="workspace-heading">
+              <div>
+                <p className="eyebrow">Zero-Knowledge Credit Verification</p>
+                <h1>{pages.find(([route]) => route === activeTab)?.[1]}</h1>
+              </div>
+              <span className="network">Midnight {RUNTIME.networkId}</span>
+            </div>
+            {runtimeIssue ? (
+              <section className="notice" role="alert">
+                <h2>Configuration needs attention</h2>
+                <p>{runtimeIssue}</p>
+                <p>
+                  Wallet and contract actions are blocked until this
+                  repository’s deployment configuration is restored.
                 </p>
+                <button onClick={() => window.location.reload()}>
+                  Retry configuration
+                </button>
+              </section>
+            ) : null}
+            {isProving && (
+              <div className="notice" role="status">
+                Awaiting wallet approval, proof generation, and confirmation.
+                Check your wallet; do not submit again.
               </div>
             )}
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.2fr', gap: '30px', opacity: (walletConnected && contractDeployed) ? 1 : 0.4, pointerEvents: (walletConnected && contractDeployed) ? 'auto' : 'none' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                <section style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '24px' }}>
-                  <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px', color: '#c5f2f7' }}><Database className="w-5 h-5" /> Requirements Parameters</h2>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>MINIMUM CREDIT RATING SCORE</span>
-                      <div style={{ fontSize: '1.8rem', fontWeight: 'bold' }}>{ledger.credit_score_threshold}+</div>
-                    </div>
-                    <div style={{ background: 'rgba(0,0,0,0.3)', padding: '16px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>CERTIFYING CREDIT BUREAU AUTHORITY</span>
-                      <div style={{ fontSize: '0.9rem', fontWeight: 700, color: 'white', marginTop: '4px' }}>{ledger.certified_authority}</div>
-                    </div>
+            {activeTab === "dashboard" && (
+              <>
+                {!ready && (
+                  <div className="notice">
+                    <strong>Before you begin</strong>
+                    <p>
+                      {!walletConnected
+                        ? "Connect your wallet to continue."
+                        : "A contract must be configured before submitting."}
+                    </p>
+                    <a href={!walletConnected ? "#/walletHub" : "#/deployer"}>
+                      {!walletConnected
+                        ? "Go to wallet →"
+                        : "Review contract →"}
+                    </a>
                   </div>
-                </section>
+                )}
+                <div className="task-grid">
+                  <section className="panel form-panel">
+                    <p className="eyebrow" style={{ color: '#0284c7', fontWeight: 700, margin: '0 0 6px' }}>SHIELDED CREDIT SCORING</p>
+                    <h2 style={{ marginTop: 0 }}>Attest Credit Standing</h2>
+                    <p style={{ fontSize: '0.88rem', color: 'var(--muted)', marginBottom: '16px' }}>
+                      Prove your bureau credit score satisfies the underwriting threshold without disclosing your exact score or financial history.
+                    </p>
 
-                <section style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '24px', textAlign: 'center' }}>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600 }}>ZK CREDIT CHECK ELIGIBILITY STATUS</span>
-                  <div style={{ fontSize: '1.25rem', fontWeight: 800, marginTop: '8px', color: ledger.validity === "true" ? 'var(--color-success)' : '#ef4444' }}>
-                    {ledger.validity === "true" ? "✓ CREDIT STATUS APPROVED" : "✕ UNVERIFIED / REJECTED STATUS"}
+                    <fieldset disabled={!ready || isProving}>
+                      <legend className="sr-only">
+                        Credential verification
+                      </legend>
+
+                      <label style={{ display: 'block', marginBottom: '8px', fontWeight: 600 }}>Credit Tier Presets</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginBottom: '16px' }}>
+                        {[
+                          ['Super-Prime (780)', 780, '65% Collateral', '2.8% APR'] as const,
+                          ['Prime (725)', 725, '85% Collateral', '4.9% APR'] as const,
+                          ['Standard (680)', 680, '105% Collateral', '7.5% APR'] as const
+                        ].map(([title, val, col, apr]) => (
+                          <div
+                            key={title}
+                            onClick={() => setFormValues(v => ({ ...v, credit_score: val }))}
+                            style={{
+                              padding: '10px',
+                              borderRadius: '6px',
+                              border: formValues.credit_score === val ? '2px solid #0284c7' : '1px solid var(--line)',
+                              background: formValues.credit_score === val ? 'rgba(2, 132, 199, 0.08)' : 'transparent',
+                              cursor: 'pointer'
+                            }}>
+                            <div style={{ fontWeight: 'bold', fontSize: '0.78rem' }}>{title}</div>
+                            <small style={{ fontSize: '0.7rem', display: 'block', color: '#15803d' }}>{col}</small>
+                            <small style={{ fontSize: '0.7rem', color: 'var(--muted)' }}>{apr}</small>
+                          </div>
+                        ))}
+                      </div>
+
+                      <label>
+                        Private witness: Credit Score
+                        <input
+                          type="number"
+                          value={formValues.credit_score}
+                          onChange={(e) =>
+                            setFormValues({
+                              ...formValues,
+                              credit_score: Number(e.target.value),
+                            })
+                          }
+                          min="0"
+                          step="1"
+                        />
+                      </label>
+
+                      <div style={{ margin: '14px 0', padding: '12px', background: 'rgba(2, 132, 199, 0.05)', borderRadius: '6px', border: '1px dashed var(--line)' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0284c7' }}>CIRCUIT PRIVACY GUARANTEE:</div>
+                        <div style={{ fontSize: '0.78rem', fontFamily: 'monospace', marginTop: '4px' }}>
+                          Constraint: <code>[HIDDEN_SCORE] &gt;= 700</code><br/>
+                          Status: <span style={{ color: formValues.credit_score >= 700 ? '#15803d' : '#b91c1c', fontWeight: 'bold' }}>
+                            {formValues.credit_score >= 700 ? '✓ ELIGIBLE FOR UNDERCOLLATERALIZED LOANS' : '✗ BELOW PRIME THRESHOLD'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', background: 'rgba(99, 102, 241, 0.08)', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.2)', margin: '14px 0' }}>
+                        <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
+                        <span style={{ fontSize: '0.85rem', color: 'inherit' }}>Equifax / Experian Shielded Bureau Credential Attached</span>
+                      </div>
+
+                      <details style={{ marginBottom: '16px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                        <summary style={{ cursor: 'pointer', padding: '4px 0', userSelect: 'none' }}>Advanced / Custom Credential</summary>
+                        <div style={{ marginTop: '8px' }}>
+                          <label>
+                            Credential salt · 64 hex characters
+                            <input
+                              type="password"
+                              value={formValues.credential_salt}
+                              onChange={(e) =>
+                                setFormValues({
+                                  ...formValues,
+                                  credential_salt: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Local proof secret
+                            <input
+                              type="password"
+                              value={formValues.user_secret}
+                              onChange={(e) =>
+                                setFormValues({
+                                  ...formValues,
+                                  user_secret: e.target.value,
+                                })
+                              }
+                            />
+                          </label>
+                        </div>
+                      </details>
+                      <button
+                        disabled={
+                          !walletConnected || !contractDeployed || isProving
+                        }
+                        onClick={() => void submitWithStatus(checkCredit)}
+                      >
+                        {isProving ? "Proving Credit Circuit…" : "Verify & Unlock Lending Terminal"}
+                      </button>
+                    </fieldset>
+                  </section>
+
+                  <aside className="panel context-panel">
+                    <h2>Verification & Credit Pass</h2>
+                    {ledger && logs.some((log) =>
+                      log.details.startsWith("Confirmed verifyCredit"),
+                    ) ? (
+                      <div style={{
+                        background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                        color: '#fff',
+                        padding: '18px',
+                        borderRadius: '8px',
+                        marginBottom: '16px'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', opacity: 0.85 }}>
+                          <span>AURA CREDIT PASSPORT</span>
+                          <span style={{ background: '#22c55e', color: '#000', padding: '1px 6px', borderRadius: '4px', fontWeight: 800 }}>VERIFIED</span>
+                        </div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 'bold', margin: '8px 0' }}>Underwriting Approved</div>
+                        <div style={{ fontSize: '0.75rem', opacity: 0.9 }}>
+                          Collateral Multiplier: <strong>65% (Undercollateralized)</strong><br/>
+                          Maximum Borrow Limit: <strong>100,000 tNIGHT</strong><br/>
+                          Disclosed Score: <strong>Zero (ZK-Shielded)</strong>
+                        </div>
+                        <a href="#/lending" className="button" style={{ display: 'block', textAlign: 'center', marginTop: '12px', background: '#fff', color: '#0284c7', fontSize: '0.8rem', padding: '8px' }}>
+                          Open Lending Terminal ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="result">Not yet verified</p>
+                        <p style={{ fontSize: '0.85rem' }}>
+                          Connect your wallet and submit the zero-knowledge credit proof above to unlock privileged borrowing limits.
+                        </p>
+                      </>
+                    )}
+                    <hr />
+                    <h3>Underwriting Parameters</h3>
+                    <p style={{ fontSize: '0.82rem' }}>
+                      Minimum Threshold: <strong>700 Credit Score</strong><br/>
+                      Certified Authorities: <strong>Equifax, Experian ZK Attestation Division</strong>
+                    </p>
+                  </aside>
+                </div>
+              </>
+            )}
+
+            {activeTab === "lending" && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '24px' }}>
+                <section className="panel">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                    <div>
+                      <p className="eyebrow" style={{ color: '#0284c7', margin: 0 }}>DEFI LIQUIDITY TERMINAL</p>
+                      <h2 style={{ margin: '4px 0' }}>Borrow Shielded tNIGHT</h2>
+                    </div>
+                    <span style={{ 
+                      padding: '4px 10px', 
+                      background: logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? '#dcfce7' : '#fee2e2', 
+                      color: logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? '#166534' : '#991b1b', 
+                      borderRadius: '6px', 
+                      fontSize: '0.75rem', 
+                      fontWeight: 700 
+                    }}>
+                      {logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? 'TIER: SUPER-PRIME (65%)' : 'STANDARD: OVERCOLLATERALIZED (150%)'}
+                    </span>
                   </div>
-                </section>
-              </div>
 
-              <div>
-                <section style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '24px' }}>
-                  <h2 style={{ fontSize: '1.25rem', marginBottom: '16px', color: '#c5f2f7', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <Compass className="w-5 h-5" /> Credential Signature Checks
-                  </h2>
                   <div style={{ marginBottom: '16px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Your Private Credit Rating Score</label>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '6px' }}>Borrow Amount (tNIGHT)</label>
                     <input 
                       type="number" 
-                      value={formValues.credit_score} 
-                      onChange={e => setFormValues({ ...formValues, credit_score: Number(e.target.value) })}
+                      value={borrowAmount} 
+                      onChange={e => setBorrowAmount(Number(e.target.value))}
+                      style={{ width: '100%', padding: '10px', fontSize: '1.1rem', fontWeight: 'bold' }}
                     />
                   </div>
-                  <div style={{ marginBottom: '20px' }}>
-                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px' }}>Bureau Authority Key Signature</label>
-                    <input 
-                      type="text" 
-                      value={formValues.authority_sig} 
-                      onChange={e => setFormValues({ ...formValues, authority_sig: e.target.value })}
-                    />
+
+                  <div style={{ padding: '16px', background: 'var(--bg)', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.85rem' }}>Required Collateral:</span>
+                      <strong>
+                        {logs.some(l => l.details.startsWith("Confirmed verifyCredit")) 
+                          ? `${(borrowAmount * 0.65).toFixed(0)} tNIGHT (65% Undercollateralized)` 
+                          : `${(borrowAmount * 1.5).toFixed(0)} tNIGHT (150% Overcollateralized)`}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '0.85rem' }}>Borrow Interest Rate:</span>
+                      <strong style={{ color: '#15803d' }}>
+                        {logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? '2.80% Fixed APR' : '11.50% Variable APR'}
+                      </strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '0.85rem' }}>Health Factor:</span>
+                      <span style={{ background: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontWeight: 700, fontSize: '0.8rem' }}>1.95 (Safe)</span>
+                    </div>
                   </div>
-                  <button onClick={checkCredit} disabled={isProving}>
-                    {isProving ? "Generating rating validation proof..." : "Prove Score Eligibility"}
+
+                  <button 
+                    type="button" 
+                    onClick={() => {
+                      const newLoan = {
+                        id: `LOAN-${Math.floor(Math.random() * 900 + 100)}`,
+                        principal: `${borrowAmount.toLocaleString()} tNIGHT`,
+                        collateral: logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? `${(borrowAmount * 0.65).toFixed(0)} tNIGHT (65%)` : `${(borrowAmount * 1.5).toFixed(0)} tNIGHT (150%)`,
+                        apr: logs.some(l => l.details.startsWith("Confirmed verifyCredit")) ? '2.8%' : '11.5%',
+                        status: 'ACTIVE'
+                      };
+                      setActiveLoans(prev => [newLoan, ...prev]);
+                      setWalletBalance(b => (Number(b) + borrowAmount).toFixed(2));
+                      logTransaction(`0x${Math.random().toString(16).slice(2, 10)}`, 'SHIELDED LOAN DISBURSED', '0.04 tNIGHT', `Borrowed ${borrowAmount} tNIGHT under ZK credit guarantee`);
+                    }}
+                    style={{ width: '100%', marginBottom: '24px' }}>
+                    Draw {borrowAmount.toLocaleString()} tNIGHT Shielded Liquidity
                   </button>
 
-                  {isProving && (
-                    <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(6,182,212,0.05)', border: '1px dashed #06b6d4', borderRadius: '8px', fontSize: '0.8rem' }}>
-                      {proofSteps.map((step, idx) => (
-                        <div key={idx} style={{ padding: '3px 0', color: idx === provingStep ? 'white' : 'var(--text-secondary)', opacity: idx <= provingStep ? 1 : 0.4 }}>
-                          {idx < provingStep ? '✓' : '●'} {step}
+                  <h3>Active Shielded Loans</h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {activeLoans.map(l => (
+                      <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                        <div>
+                          <strong>{l.principal}</strong> <span style={{ fontSize: '0.75rem', color: '#15803d', fontWeight: 700 }}>{l.apr} APR</span>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>Collateral: {l.collateral}</div>
                         </div>
-                      ))}
-                    </div>
+                        <div style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.75rem', padding: '2px 6px', background: '#dcfce7', color: '#166534', borderRadius: '4px', fontWeight: 700 }}>{l.status}</span>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginTop: '4px' }}>{l.id}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+
+                <aside className="panel">
+                  <p className="eyebrow" style={{ color: '#0284c7' }}>LIQUIDITY POOL</p>
+                  <h2>Midnight Credit Reserve</h2>
+                  <p style={{ fontSize: '0.85rem' }}>
+                    Instant zero-knowledge loans backed by verified on-chain and off-chain solvency proofs.
+                  </p>
+                  <div style={{ padding: '14px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--line)', marginBottom: '16px' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Available Vault Liquidity</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold' }}>2,450,000 tNIGHT</div>
+                  </div>
+                  <div style={{ padding: '14px', background: 'var(--bg)', borderRadius: '6px', border: '1px solid var(--line)' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Total Undercollateralized Issued</div>
+                    <div style={{ fontSize: '1.4rem', fontWeight: 'bold', color: '#15803d' }}>890,400 tNIGHT</div>
+                  </div>
+                </aside>
+              </div>
+            )}
+
+            {activeTab === "walletHub" && (
+              <div className="task-grid">
+                <section className="panel">
+                  <h2>Wallet connection</h2>
+                  <p>
+                    {laceDetected
+                      ? "A compatible wallet connector is available."
+                      : "Install and unlock a compatible Midnight wallet such as 1AM or Lace."}
+                  </p>
+                  {walletConnected ? (
+                    <>
+                      <p className="address">{walletAddress}</p>
+                      <p>Reported balance: {walletBalance} tNIGHT</p>
+                      <button className="secondary" onClick={disconnectLace}>
+                        Disconnect wallet
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      disabled={connectingWallet}
+                      onClick={connectLace}
+                    >
+                      {connectingWallet ? "Connecting…" : "Connect wallet"}
+                    </button>
                   )}
                 </section>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'deployer' && (
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '30px' }}>
-            <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#c5f2f7' }}>
-              <Cpu className="w-6 h-6" /> Credit Gate Deployer
-            </h2>
-            {contractDeployed ? (
-              <p style={{ color: '#10b981' }}>Deployed Preview Address: {contractAddress}</p>
-            ) : (
-              <button onClick={deployContractAction} disabled={isDeploying || !walletConnected}>
-                {isDeploying ? "Deploying..." : "Compile & Deploy Contract"}
-              </button>
-            )}
-
-            {isDeploying && (
-              <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(6, 182, 212, 0.05)', border: '1px dashed #06b6d4', borderRadius: '8px', fontSize: '0.8rem' }}>
-                {deploySteps.map((step, idx) => (
-                  <div key={idx} style={{ padding: '3px 0', color: idx === deployStep ? 'white' : 'var(--text-secondary)', opacity: idx <= deployStep ? 1 : 0.4 }}>
-                    {idx < deployStep ? '✓' : '●'} {step}
-                  </div>
-                ))}
+                <section className="panel">
+                  <h2>Test-network funding</h2>
+                  <p>
+                    The faucet opens in a separate tab. Funding is not confirmed
+                    by opening the page; check your wallet balance.
+                  </p>
+                  <button
+                    disabled={!walletConnected}
+                    onClick={requestFaucet}
+                  >
+                    Open faucet ↗
+                  </button>
+                </section>
               </div>
             )}
-          </div>
-        )}
-
-        {activeTab === 'walletHub' && (
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '30px' }}>
-            <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#c5f2f7' }}>
-              <Wallet className="w-6 h-6" /> Wallet Hub & Logs
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '30px' }}>
-              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '12px' }}>
-                <h3>Lace Account</h3>
-                {walletConnected ? (
-                  <div>
-                    <div style={{ fontFamily: 'monospace', wordBreak: 'break-all', fontSize: '0.85rem', marginBottom: '10px' }}>{walletAddress}</div>
-                    <button onClick={disconnectLace} style={{ width: 'auto', background: '#dc2626' }}>Disconnect</button>
-                  </div>
+            {activeTab === 'deployer' && <OperatorSetup wallet={walletConnected ? connectedWallet : null} address={runtimeIssue ? null : contractAddress} />}
+            {activeTab === "deployer" && (
+              <section className="panel">
+                <h2>Contract configuration</h2>
+                <p>
+                  Confirm this address and network before approving a
+                  transaction.
+                </p>
+                {contractDeployed ? (
+                  <p className="address">{contractAddress}</p>
                 ) : (
-                  <button onClick={connectLace} style={{ width: 'auto' }}>Connect Wallet</button>
+                  <>
+                    <p>No matching contract is configured.</p>
+                    <button
+                      disabled={
+                        !walletConnected || isDeploying
+                      }
+                      onClick={deployContractAction}
+                    >
+                      {isDeploying ? "Deploying…" : "Deploy contract"}
+                    </button>
+                  </>
                 )}
-              </div>
-              <div style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '12px' }}>
-                <h3>Get tNIGHT</h3>
-                <button onClick={requestFaucet} disabled={!walletConnected || faucetLoading}>
-                  {faucetLoading ? "Requesting..." : "Mint Faucet Tokens"}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'privacy' && (
-          <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', padding: '30px' }}>
-            <h2 style={{ fontSize: '1.4rem', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', color: '#c5f2f7' }}>
-              <Lock className="w-6 h-6" /> Zero-Knowledge Privacy Model
-            </h2>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px' }}>
-              <div style={{ background: 'rgba(16, 185, 129, 0.03)', border: '1px solid rgba(16, 185, 129, 0.15)', padding: '24px', borderRadius: '12px' }}>
-                <h3 style={{ color: '#10b981' }}>Can Learn:</h3>
-                <ul>
-                  <li>Minimum threshold parameters requirement.</li>
-                  <li>Bureau public key registry anchor values.</li>
-                </ul>
-              </div>
-              <div style={{ background: 'rgba(239, 68, 68, 0.03)', border: '1px solid rgba(239, 68, 68, 0.15)', padding: '24px', borderRadius: '12px' }}>
-                <h3 style={{ color: '#f87171' }}>Cannot Learn:</h3>
-                <ul>
-                  <li>Specific credit rating integer of the loan applicant.</li>
-                  <li>User signature keys or keys.</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
+              </section>
+            )}
+            {activeTab === "privacy" && (
+              <section className="panel privacy-detail">
+                <h2>What this application protects</h2>
+                <p>
+                  Your score, credential salt, and proof secret are passed as
+                  private witness inputs. Public contract data and a successful
+                  verification can still be observable. A proof is not a
+                  credit-bureau endorsement, loan approval, or guarantee of
+                  confidentiality across the entire device and network.
+                </p>
+                <h3>Your responsibility</h3>
+                <p>
+                  Use a dedicated application credential. Never enter your
+                  wallet recovery phrase.
+                </p>
+                <p>
+                  Keep credential secrets on a trusted device. Check wallet
+                  requests and the configured contract. Do not share secret
+                  inputs, screenshots of credentials, or sensitive personal
+                  information.
+                </p>
+                <h3>Confirmation matters</h3>
+                <p>
+                  A wallet connection or submitted request is not evidence of a
+                  successful transaction. Review the session activity and your
+                  wallet for confirmation.
+                </p>
+              </section>
+            )}
+            {(activeTab === "dashboard" || activeTab === "walletHub") && (
+              <section className="activity panel" aria-live="polite">
+                <h2>Activity this session</h2>
+                {logs.length === 0 ? (
+                  <p>
+                    No activity yet. Completed actions and errors will appear
+                    here.
+                  </p>
+                ) : (
+                  <ol>
+                    {logs.map((log, index) => (
+                      <li key={index}>
+                        <strong>{log.status}</strong>
+                        <time>{log.timestamp}</time>
+                        <p>{log.details}</p>
+                        <code>{log.hash}</code>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+            )}
+          </main>
+        </div>
+      )}
+      <footer>
+        <span>Credit / Compass</span>
+        <span>
+          Midnight application · Review privacy before using real data.
+        </span>
+        <a href="#/privacy">Privacy notes</a>
+      </footer>
     </div>
   );
 }
