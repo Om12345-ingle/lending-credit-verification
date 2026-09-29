@@ -1,9 +1,9 @@
 {
-  "network": "preview",
-  "contract": "credit_gate",
-  "contractAddress": "0c4bbb7dc537f0d17c5cc7a8df2c93c385fbf8e5c2ff4216d9a964207ffeed0c",
-  "transactionHash": "00c0b1d5f34206c1cc894e193c762d1ba78548b667dcfb193cd18bee0a474455f3",
-  "deployer": "mn_addr_preview1htenx2hpt3uklqt6dx3qnyz0u5u20e4lh3nygtxqg2y3kdz9c2tq5tcyfd",
-  "deployedAt": "2026-08-03T19:03:44.831Z",
-  "verifiedBy": "Midnight Preview indexer"
+  "network": "preprod",
+  "contractName": "credit_gate",
+  "contractAddress": "33a243703d51b14fbe19b61300f59a53fb3b65224ec2322dd2b372743f23795e",
+  "transactionHash": "715de6b6f3bf4225be0290fe4bb8ec50894f6d74313cddd324589b9b92af738c",
+  "deployer": null,
+  "deployedAt": "2026-09-18T08:24:54.000Z",
+  "verifiedBy": "Midnight Preprod indexer"
 }

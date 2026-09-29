@@ -24,8 +24,7 @@ describe('Lending Credit Verification production configuration', () => {
   });
 
   it('prevents demo mode and network drift in production', () => {
-    expect(() => validateCreditGateDeploymentRuntime({ networkId: 'preprod' })).toThrow(/Preview/);
+    expect(validateCreditGateDeploymentRuntime({ networkId: 'preprod' }).networkId).toBe('preprod');
     expect(() => validateCreditGateDeploymentRuntime({ production: true, demoMode: 'true' })).toThrow(/forbidden/);
   });
 });
-
