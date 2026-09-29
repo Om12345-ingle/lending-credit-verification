@@ -1,6 +1,6 @@
 {
   "cleanUrls": true,
-  "alias": "omyaaingle-0jcg.vercel.app",
+  "alias": "credit-compass-khaki.vercel.app",
   "buildCommand": "npm run build",
   "outputDirectory": "dist"
 }
