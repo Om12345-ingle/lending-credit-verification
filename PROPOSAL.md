@@ -10,11 +10,11 @@ Lenders need a threshold decision, not a borrower’s full score and history.
 
 ## Proposed product
 
-Lending Credit Verification registers trusted agencies and evaluates a minimum-credit policy from a signed credential without publishing the underlying score.
+Lending Credit Verification anchors administrator-issued score commitments and evaluates a minimum-credit policy without publishing the underlying score.
 
 ## Privacy model
 
-Threshold configuration and proof outcome can be audited. Borrower identity, exact score, bureau history, and signature payload remain private.
+Threshold configuration, issued commitment count, and proof outcome can be audited. Borrower identity, exact score, bureau history, and credential salt remain private.
 
 ## User journey
 
@@ -25,7 +25,7 @@ Threshold configuration and proof outcome can be audited. Borrower identity, exa
 
 ## Success criteria
 
-- Only trusted agencies can produce accepted credentials.
+- Only commitments issued through the administrator circuit are accepted.
 - Valid scores pass the configured threshold.
 - Invalid agency or score inputs fail.
 - No real financial records are used in testing.
