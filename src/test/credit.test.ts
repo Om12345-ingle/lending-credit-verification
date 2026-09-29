@@ -1,81 +1,52 @@
 import { CreditSimulator } from "./credit-simulator.js";
 import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import { randomBytes } from "./utils.js";
 
 setNetworkId("undeployed");
 
-describe("Credit Score Gate Smart Contract Tests", () => {
+describe("Credit credential commitment contract", () => {
   const adminSecret = randomBytes(32);
   const minScore = 650n;
-
-  // Setup helper to create a simulator
-  const setupSimulator = (userSecret: Uint8Array, creditScore: bigint, agencySig: Uint8Array) => {
-    const tempSim = new CreditSimulator(adminSecret, 0n, new Uint8Array(32), minScore, new Uint8Array(32));
-    const adminPk = tempSim.publicKey(adminSecret);
-    return new CreditSimulator(userSecret, creditScore, agencySig, minScore, adminPk);
+  const setup = (score: bigint, salt: Uint8Array) => {
+    const bootstrap = new CreditSimulator(adminSecret, 0n, new Uint8Array(32), minScore, new Uint8Array(32));
+    return new CreditSimulator(randomBytes(32), score, salt, minScore, bootstrap.publicKey(adminSecret));
   };
 
-  it("1. Properly initializes contract parameters and min credit score", () => {
-    const userSecret = randomBytes(32);
-    const simulator = setupSimulator(userSecret, 700n, new Uint8Array(32));
-    const ledgerState = simulator.getLedger();
-
-    expect(ledgerState.min_credit_score).toEqual(650n);
+  it("initializes the minimum score", () => {
+    expect(setup(700n, randomBytes(32)).getLedger().min_credit_score).toBe(650n);
   });
 
-  it("2. Lets admin register a trusted credit agency", () => {
-    const userSecret = randomBytes(32);
-    const simulator = setupSimulator(userSecret, 700n, new Uint8Array(32));
-    const agencyPk = randomBytes(32);
-
-    // Switch to admin to register
-    simulator.switchUser(adminSecret, 0n, new Uint8Array(32));
-    const ledgerState = simulator.registerAgency(agencyPk);
-    expect(ledgerState.trusted_agencies.member(agencyPk)).toEqual(true);
+  it("allows only the administrator to issue score commitments", () => {
+    const salt = randomBytes(32);
+    const sim = setup(700n, salt);
+    const commitment = sim.credentialCommitment(700n, salt);
+    expect(() => sim.issueCredential(commitment)).toThrow(/Only admin/);
+    sim.switchUser(adminSecret, 0n, new Uint8Array(32));
+    expect(sim.issueCredential(commitment).issued_credentials.member(commitment)).toBe(true);
   });
 
-  it("3. Returns true when credit score is equal or higher than target and signature matches", () => {
-    const userSecret = randomBytes(32);
-    const agencyPk = randomBytes(32);
-    const score = 680n;
-
-    const simulator = setupSimulator(userSecret, score, agencyPk);
-
-    // Register agency
-    simulator.switchUser(adminSecret, 0n, new Uint8Array(32));
-    simulator.registerAgency(agencyPk);
-
-    // User runs check
-    simulator.switchUser(userSecret, score, agencyPk);
-    const isEligible = simulator.verifyCredit();
-    expect(isEligible).toEqual(true);
+  it("verifies an issued score at or above the threshold", () => {
+    const salt = randomBytes(32);
+    const sim = setup(680n, salt);
+    const commitment = sim.credentialCommitment(680n, salt);
+    sim.switchUser(adminSecret, 0n, new Uint8Array(32));
+    sim.issueCredential(commitment);
+    sim.switchUser(randomBytes(32), 680n, salt);
+    expect(sim.verifyCredit()).toBe(true);
   });
 
-  it("4. Throws when user score is below the min score requirement", () => {
-    const userSecret = randomBytes(32);
-    const agencyPk = randomBytes(32);
-    const score = 620n; // Under 650
-
-    const simulator = setupSimulator(userSecret, score, agencyPk);
-
-    // Register agency
-    simulator.switchUser(adminSecret, 0n, new Uint8Array(32));
-    simulator.registerAgency(agencyPk);
-
-    // User runs check
-    simulator.switchUser(userSecret, score, agencyPk);
-    expect(() => simulator.verifyCredit()).toThrow("failed assert: Credit score is below requirement");
+  it("rejects an issued score below the threshold", () => {
+    const salt = randomBytes(32);
+    const sim = setup(620n, salt);
+    const commitment = sim.credentialCommitment(620n, salt);
+    sim.switchUser(adminSecret, 0n, new Uint8Array(32));
+    sim.issueCredential(commitment);
+    sim.switchUser(randomBytes(32), 620n, salt);
+    expect(() => sim.verifyCredit()).toThrow(/below/);
   });
 
-  it("5. Throws when the credit report was signed by an untrusted agency", () => {
-    const userSecret = randomBytes(32);
-    const untrustedAgencyPk = randomBytes(32);
-    const score = 700n;
-
-    const simulator = setupSimulator(userSecret, score, untrustedAgencyPk);
-
-    // User runs check without whitelisting agency
-    expect(() => simulator.verifyCredit()).toThrow("failed assert: Credit report not signed by trusted agency");
+  it("rejects an unissued score credential", () => {
+    expect(() => setup(700n, randomBytes(32)).verifyCredit()).toThrow(/not issued/);
   });
 });
